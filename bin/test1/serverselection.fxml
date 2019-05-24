@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Rectangle2D?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.text.Font?>
+<?import javafx.scene.text.Text?>
+
+<Pane maxHeight="640.0" maxWidth="800.0" minHeight="-Infinity" minWidth="-Infinity" prefHeight="640.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="test1.ServerSelectionController">
+   <children>
+      <ImageView fitHeight="665.0" fitWidth="1309.0" layoutX="-273.0" layoutY="-6.0" pickOnBounds="true" preserveRatio="true">
+         <viewport>
+            <Rectangle2D minX="800.0" />
+         </viewport>
+         <image>
+            <Image url="@../res/mainmenubg.jpg" />
+         </image>
+      </ImageView>
+      <Text disable="true" layoutX="282.0" layoutY="83.0" stroke="WHITE" strokeType="OUTSIDE" strokeWidth="2.0" text="Test name">
+         <font>
+            <Font size="52.0" />
+         </font>
+      </Text>
+      <Text layoutX="651.0" layoutY="622.0" strokeType="OUTSIDE" strokeWidth="0.0" text="© 2019 Piotr Zmyślony" />
+      <ScrollPane layoutX="102.0" layoutY="160.0" prefHeight="360.0" prefWidth="596.0">
+        <content>
+          <AnchorPane fx:id="anchorPane" minHeight="0.0" minWidth="0.0" prefHeight="101.0" prefWidth="574.0" />
+        </content>
+      </ScrollPane>
+      <Text layoutX="102.0" layoutY="153.0" stroke="WHITE" strokeType="OUTSIDE" text="Select a server:">
+         <font>
+            <Font size="27.0" />
+         </font>
+      </Text>
+      <Button layoutX="642.0" layoutY="129.0" mnemonicParsing="false" onAction="#refreshList" text="Refresh" />
+      <Button layoutX="102.0" layoutY="527.0" mnemonicParsing="false" onAction="#goBack" text="&lt;- Back" />
+   </children>
+</Pane>
