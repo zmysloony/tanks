@@ -5,11 +5,11 @@ Two player, turn based game, with socket-based online functionality and a MySQL 
 
 Interface is done in JavaFX with FXML and SceneBuilder's help.
 
-**TODO:** (updated 24.05.2019)
+**TODO:** (updated 04.06.2019)
 - [ ] Server selection from database
-- [ ] Victory/defeat screen
+- [x] Victory/defeat screen
 - [ ] PHP site to display rankings
 - [ ] Rankings table
 - [ ] Locking a logged account
-- [ ] Resolving games where one player quit
-- [ ] GUI polishing
+- [x] Resolving games where one player quit
+- [x] GUI polishing
