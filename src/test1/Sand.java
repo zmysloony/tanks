@@ -1,15 +1,23 @@
 package test1;
 
+//import org.apache.log4j
+
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.Random;
+
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -20,50 +28,23 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.MouseEvent;
-
-import java.sql.SQLException;
-
-import java.util.Random;
 
 
-enum MapState {
-	W84PLAYER, LOADEDMAP, ENTRY, CANSHOOT, BULLETFLYING
-}
 
-enum Comm {
-	sSHAKE, sURTURN, sSHOT, sENDCONNECTION,
-	cSHAKE, cURTURN, cSHOT,
-	ERROR
-}
 
-class CommExt {
-	Comm task;
-	double x;
-	double y;
-	int ext;
-	boolean fin; // false if not complete
-	
-	CommExt(Comm a, double b, double c, int d) {
-		task = a;
-		x = b;
-		y = c;
-		ext = d;
-		fin = true;
-	}
-}
 
 public class Sand extends Application {
-	
+	Logger log;
 	int width;
 	int height;
 	int splashRadius;
@@ -73,6 +54,7 @@ public class Sand extends Application {
 	boolean myTurn;
 	boolean stable;
 	boolean map[];
+	int mapSeed;
 	Image mapka;
 	ImageView iv;
 	Stage mainStage;
@@ -84,12 +66,39 @@ public class Sand extends Application {
 	
 	Scene logScene, regScene, mmScene, servScene;
 	
-	int loggedPID;
+	int loggedPID, enemyPID, currentGID;
 	CommThread clientThread;
 	CommThread serverThread;
+	DbHandler dbHandler;
+	
+	MainMenuController mmCtrl;			// these two are needed to display text alerts (server not found etc)
+	ServerSelectionController ssCtrl;
+	
+	enum MapState {
+		W84PLAYER, LOADEDMAP, ENTRY, CANSHOOT, BULLETFLYING
+	}
+	
+	enum Comm {
+		SHAKE, URTURN, SHOT, ENDCONNECTION, // TODO remove shake, remove Urturn
+		ERROR
+	}
+	
+	 class CommExt {
+		Comm task;
+		double x;
+		double y;
+		int ext;
+		
+		CommExt(Comm a, double b, double c, int d) {
+			task = a;
+			x = b;
+			y = c;
+			ext = d;
+		}
+	}
 	
 	public Sand() {
-		
+		log = LogManager.getRootLogger();
 		width = 800;
 		height = 640;
 		splashRadius = 40;
@@ -98,10 +107,15 @@ public class Sand extends Application {
 		maxDmg = 35;
 		
 		loggedPID = -1; // error state
+		currentGID = -1; // error state
+		enemyPID = -1;
 		
 		state = MapState.ENTRY;
 		stable = false;
 		map = new boolean[height*width];	//automatically fills with zeros
+		mapSeed = 137;		// TODO generating map with seeds
+		
+		dbHandler = new DbHandler();
 	}
 	
 	protected void loginScene() {
@@ -150,8 +164,8 @@ public class Sand extends Application {
 		try {
 			FXMLLoader loader = new FXMLLoader(getClass().getResource("mainmenu.fxml"));
 			Parent root = loader.load();
-			MainMenuController ctrl = loader.getController();
-			ctrl.setParent(this);
+			mmCtrl = loader.getController();
+			mmCtrl.setParent(this, dbHandler);
 			mmScene = new Scene(root, width, height);
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -165,13 +179,15 @@ public class Sand extends Application {
 	public void serverSelectionScene() {
 	     if(servScene != null) {
 	    	 mainStage.setScene(servScene);
+	    	 ssCtrl.refreshList(null);
 	    	 return;
 	     }
 			try {
 				FXMLLoader loader = new FXMLLoader(getClass().getResource("ServerSelection.fxml"));
 				Parent root = loader.load();
-				ServerSelectionController ctrl = loader.getController();
-				ctrl.setParent(this);
+				ssCtrl = loader.getController();
+				ssCtrl.setParent(this);
+				ssCtrl.refreshList(null);
 				servScene = new Scene(root, width, height);
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -188,34 +204,76 @@ public class Sand extends Application {
 		Socket clientSocket;
 		DataInputStream dataIn;
 		DataOutputStream dataOut;
-		CommExt current;
 		boolean isServer;
-		String nameHandle;
-		
-
         boolean quit;
 		
-		public CommThread(boolean server, int socketNum) throws IOException {
-			if(server) servSocket = new ServerSocket(socketNum);
-			isServer = server;
+		public CommThread(int socketNum) throws IOException {
+			
+			isServer = true;
 			quit = false;
-			nameHandle = server ? "(server) " : "(client) ";
-			System.out.println(nameHandle + "constructed");
+			//while(servSocket == null) {
+				try {
+					//if(socketNum>=44020) throw new IOException();
+					servSocket = new ServerSocket(socketNum);
+				} catch (IOException ignored) {
+					log.error("socket 44020 taken, cannot start server");
+					//socketNum++;
+					quit = true;
+				}
+			//}
+			
+			this.setName("server thread");
+			log.info("server created successfully");
 		}
 		
-		public void sendShot(double x, double y) {
+		public boolean correct() {
+			return quit ? false : true;
+		}
+		
+		public CommThread(String ip, int port) throws IOException {
+			int attempt = 1;
+			while(clientSocket == null && attempt < 4) {
+				try {
+					clientSocket = new Socket(ip, port);
+					dataIn = new DataInputStream(clientSocket.getInputStream());
+	                dataOut = new DataOutputStream(clientSocket.getOutputStream());
+	                log.info("connected succesfully to " + ip + ":" + port);
+	                dataOut.writeBoolean(true);
+	                dataOut.writeInt(loggedPID);
+	                log.info("sent my PID (" + loggedPID + ")");
+	                quit = false;
+				} catch (IOException e) {
+					log.error("couldn't connect to server (maybe outdated server list), attempt "+attempt+"/3");
+					attempt++;
+					quit = true;
+				}
+			}
+			log.info("constructed");
+		}
+		
+		private void sendCommExt(int comm, double x, double y, int ext) {
 			try {
-				dataOut.writeInt(getValue(Comm.sSHOT));
+				dataOut.writeInt(comm);
 				dataOut.writeDouble(x);
 				dataOut.writeDouble(y);
-				dataOut.writeInt(player.shotVelocity);
+				dataOut.writeInt(ext);
 				dataOut.flush();
 			} catch (IOException e) {
-				System.out.println(nameHandle +"sending ioexception");
+				log.error("ioexception while sending (correct after finishing a game)");
 			}
 		}
 		
-		public CommExt getSignal() {
+		public void sendShot(double x, double y) {
+			sendCommExt(getValue(Comm.SHOT), x, y, player.shotVelocity);
+		}
+		
+		public void requestConnectedQuit() {
+			if(dataOut==null) return;
+			
+			sendCommExt(getValue(Comm.ENDCONNECTION), 0, 0, 0);
+		}
+		
+		protected CommExt getSignal() {
 			CommExt fullComm = null;
 			try {
 				Comm commType =  toComm(dataIn.readInt());
@@ -224,51 +282,59 @@ public class Sand extends Application {
 				int ext = dataIn.readInt();
 				fullComm = new CommExt(commType, x, y, ext);
 			} catch (IOException e) {
-				System.out.println(nameHandle+ " got ioexception");
+				log.error("recieved ioexception");
 			}
 			return fullComm;
 		}
 		
+		
 		private void serverSetup() {
+			try {
+				// TODO database server listing and making a real server
+
+				dbHandler.deleteAllGamesWithPid(loggedPID);
+				dbHandler.addNewGame(loggedPID);
+				servSocket.setSoTimeout(2000);
+				// get new GID
+				currentGID = dbHandler.getGidByPid(loggedPID); // new GID loaded
+				log.info("new GID: " + currentGID);
+	            serverCheckWaiter(); // waits until client connects, while responding to other connections
+	            waiter();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		
+		private void serverCheckWaiter() {
 			try {
 				servSocket.setSoTimeout(2000);
 				Socket connSocket = null;
 				while(connSocket == null)	// necessary timeout so thread never hangs after closing
 					try {
-						if(quit == true) 
+						if(quit == true) // allows exiting the loop when requested to close server
 							return;
 						connSocket = servSocket.accept();
+						log.info("probed by " + connSocket.getInetAddress() + ":" + connSocket.getPort());
+			            dataIn = new DataInputStream(connSocket.getInputStream());
+			            dataOut = new DataOutputStream(connSocket.getOutputStream());
+			            if(dataIn.readBoolean()==false) { 	// recieving false means just a server check (not joining the game)
+			            	dataOut.writeInt(loggedPID);
+			            	dataIn = null;
+			            	dataOut = null;
+			            	connSocket = null;
+			            } else {	// actual player connected
+			            	System.out.println("lol");
+			            	enemyPID = dataIn.readInt();
+				    		dbHandler.updateSecondPlayer(enemyPID, currentGID);
+				    		log.info("user connected (PID=" + enemyPID + ")");
+			            	state = MapState.CANSHOOT;
+			            }
 					} catch (SocketTimeoutException e) {
-						System.out.println(nameHandle + "still waiting for client");
+						log.info("still waiting for client");
+						connSocket = null;
 					} catch (SocketException e) {
-						System.out.println("No exception, just closing an accepting socket.");
+						log.info("closing server socket");
 					}
-				
-	    		System.out.println(nameHandle + "client connected");
-	            dataIn = new DataInputStream(connSocket.getInputStream());
-	            dataOut = new DataOutputStream(connSocket.getOutputStream());
-	            //log4j
-	            if (connSocket.isConnected()) {
-	            	dataOut.writeInt(getValue(Comm.sSHAKE));
-	            	dataOut.writeDouble(0);
-	            	dataOut.writeDouble(0);
-	            	dataOut.writeInt(1);
-	            	dataOut.flush();
-	            	// sent handshake
-	            	//TODO handshake method
-	            	System.out.println(nameHandle + "sent handshake");
-	            	Comm fromClient = toComm(dataIn.readInt());
-	            	if(fromClient == Comm.cSHAKE);
-	            	System.out.println(nameHandle + "we shook");
-	            	sleep(5); // test
-	            	System.out.println(nameHandle + "sending shot command");
-	            	sendShot(15,15);
-	            	while(player==null) {}
-	            	state = MapState.BULLETFLYING;
-	            	player.shootAt(15, 15);
-	            	System.out.println(nameHandle + "done test shot");
-	            }
-	            waiter();
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -276,37 +342,36 @@ public class Sand extends Application {
 		
 		private void clientSetup() {
 			try {
-				clientSocket = new Socket("localhost", 4443);
-				dataIn = new DataInputStream(clientSocket.getInputStream());
-                dataOut = new DataOutputStream(clientSocket.getOutputStream());
-                System.out.println(nameHandle + "created socket");
                 waiter();
 			}  catch (Exception e) {
                 e.printStackTrace();
             }
 		}
 		
-		private void waiter() throws IOException {
+		private void waiter() {		// handles in-game communication
 			CommExt signal;
             while(quit == false) {
                 signal = getSignal();
-                System.out.println(nameHandle + "read " + signal.task);
+                log.info("recieved " + signal.task);
                 // get full extended command
                 switch(signal.task) {
-                case sSHAKE: // only Comm
-                	System.out.println(nameHandle + "sending shake back");
-                	dataOut.writeInt(getValue(Comm.cSHAKE));
-                	break;
-                case sSHOT: // full CommExt
-                	System.out.println(nameHandle + "recieved shot command");
-                	//sleep(5);
-                	while(stable==false || state==MapState.ENTRY) {
-                		System.out.println("waiting for sand to drop...");
-                	}
+                case SHOT:
+                	while(stable==false || state==MapState.ENTRY) {	// has to wait until sand drops (when game start
+                		log.info("waiting for sand to drop");		// or when player recieves shot command while sand
+                	}												// is still falling
                 	state = MapState.BULLETFLYING;
                 	enemy.shootAt(signal.x, signal.y, signal.ext);
+                	break;
+                case ENDCONNECTION:
+                	System.out.println("Enemy quit the game.");
+                	Platform.runLater(
+                			() -> {
+                            	mmCtrl.enemyQuit(loggedPID, enemyPID);
+                				mainMenu();
+                			}
+                	);
+                	quit(false);
                 	
-            		System.out.println(nameHandle + "recieved full shot");
                 	break;
                 default:
                 	System.out.println("Erroneous command.");
@@ -326,88 +391,143 @@ public class Sand extends Application {
 		
 		
 
-		public void quit() {
+		public void quit(boolean sentToEnemy) {
 			try {
+				if(currentGID!=-1) { // has to delete game if started
+					dbHandler.deleteAllGamesWithPid(loggedPID);
+				}
+				
+				if(sentToEnemy) requestConnectedQuit();
 				if(servSocket != null) servSocket.close();
 				if(clientSocket != null) clientSocket.close();
+				currentGID = -1;
+				enemyPID = -1;
 			} catch (Exception e) {
 				System.out.println("Exception while closing sockets");
+				e.printStackTrace();
 			}
         	quit = true;
         }
 	}
 	
-	public boolean isServer(String ip, int port) {
+	private String cutSubnet(String fullIp) {
+		String resultIp = fullIp;
+		for(int i=resultIp.length()-1; i>=5; i--) {
+			if(resultIp.charAt(i)=='.') {
+				resultIp = resultIp.substring(0,i+1);
+				break;
+			}
+		}
+		return resultIp;
+	}
+	
+	public String getLanIp() {
+		return cutSubnet(getLocalIp());
+	}
+	
+	public String getLocalIp() {
+		/*try {
+			
+			InetAddress localHost = InetAddress.getLocalHost();
+			//NetworkInterface networkInterface = NetworkInterface.getByInetAddress(localHost);
+			return localHost.getHostAddress();
+			//System.out.println(networkInterface.getInterfaceAddresses().get(0).getNetworkPrefixLength()); // gets subnet
+		} catch (Exception e) {
+			e.printStackTrace();
+		}*/
+		try(final DatagramSocket socket = new DatagramSocket()){
+			  socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
+			  return socket.getLocalAddress().getHostAddress();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return "Error getting local IP address.";
+	}
+	
+	public int isServer(String ip, int port) {
 		Socket tester = new Socket();
+		int maybePID;
 		try {
+			//System.out.println(ip + " " + port);
 			tester.connect(new InetSocketAddress(ip, port), 10);
+			DataInputStream dataIn = new DataInputStream(tester.getInputStream());
+	        DataOutputStream dataOut = new DataOutputStream(tester.getOutputStream());
+	        dataOut.writeBoolean(false);
+	        tester.setSoTimeout(500);
+	        maybePID = dataIn.readInt();
+	        if(maybePID == -1) {
+	        	tester.close();
+	        	return -1;
+	        }
 			tester.close();
 		} catch (IOException e) {
-			e.printStackTrace();
-			return false;
+			//e.printStackTrace();
+			return -1;
 		}
-		return true;
+		
+		return maybePID;
 	}
 	
 	public void startServer() {
+		System.out.println("System IP Address : " + getLocalIp());
+	
+	        
 		try {
-    		serverThread = new CommThread(true, 4443);
-    		serverThread.start();
+    		serverThread = new CommThread(44020);
     		System.out.println("(main menu) server starting done");
-    		setGame(1);
+    		if(serverThread.correct()) {
+    			serverThread.start();
+        		setGame(1);
+    		} else {
+    			System.out.println("Couldn't create server correctly.");
+    		}
     	} catch (Exception a) {
     		a.printStackTrace();
     	}
 	}
 	
-	public void startClient() {
+	public void startClient(String ip, int port, int newPid) {
 		try {
-    		clientThread = new CommThread(false, 4443);
-    		clientThread.start();
+    		clientThread = new CommThread(ip, port);
     		System.out.println("(main menu) client starting done");
-    		setGame(2);
+    		if(clientThread.correct()) {
+        		setGame(2);
+        		clientThread.start();
+    		} else {
+    			System.out.println("Couldn't establish connection to server (maybe update server list before connecting?)");
+    			ssCtrl.refreshList(null);
+    		}
+    		enemyPID = newPid;
     	} catch (Exception a) {
     		a.printStackTrace();
     	}
 	}
 	
-	public static int getValue(Comm comm) {
+	protected static int getValue(Comm comm) {
 		switch(comm) {
-		case sSHAKE:
+		case SHAKE:
 			return 1;
-		case sURTURN:
+		case URTURN:
 			return 2;
-		case sSHOT:
+		case SHOT:
 			return 3;
-		case sENDCONNECTION:
+		case ENDCONNECTION:
 			return 4;
-		case cSHAKE:
-			return 5;
-		case cURTURN:
-			return 6;
-		case cSHOT:
-			return 7;
 		default:
 			return -1;
 		}
 	}
 	
-	public static Comm toComm(int comm) {
+	protected static Comm toComm(int comm) {
 		switch(comm) {
 		case 1:
-			return Comm.sSHAKE;
+			return Comm.SHAKE;
 		case 2:
-			return Comm.sURTURN;
+			return Comm.URTURN;
 		case 3:
-			return Comm.sSHOT;
+			return Comm.SHOT;
 		case 4:
-			return Comm.sENDCONNECTION;
-		case 5:
-			return Comm.cSHAKE;
-		case 6:
-			return Comm.cURTURN;
-		case 7:
-			return Comm.cSHOT;
+			return Comm.ENDCONNECTION;
 		default:
 			return Comm.ERROR;
 		}
@@ -417,7 +537,7 @@ public class Sand extends Application {
 	
 	
 	@Override
-    public void start(Stage stage) throws InterruptedException, ClassNotFoundException, SQLException {
+    public void start(Stage stage) throws InterruptedException {
 		stage.setTitle("105 leFH18B2");
 		//stage.initStyle(StageStyle.UNDECORATED);
         mainStage = stage;
@@ -426,8 +546,14 @@ public class Sand extends Application {
             public void handle(WindowEvent we) {
                 System.out.println("Stage is closing");
                 
-                if(serverThread!=null) serverThread.stop();
-                if(clientThread!=null) clientThread.stop();
+                dbHandler.deleteAllGamesWithGid(currentGID);
+                
+                if(serverThread!=null) {
+                	serverThread.quit(false);
+                }
+                if(clientThread!=null) {
+                	clientThread.quit(false);
+                }
                 if(timer!=null) timer.stop();
                 Platform.exit();
                 
@@ -436,8 +562,18 @@ public class Sand extends Application {
         loginScene();
     }
 	
+	public void close() {
+		mainStage.getOnCloseRequest()
+	    .handle(
+	        new WindowEvent(
+	            mainStage,
+	            WindowEvent.WINDOW_CLOSE_REQUEST
+	        )
+	    );
+	}
 	
-	protected void setGame(int playerS) throws InterruptedException, ClassNotFoundException, SQLException {
+	
+	protected void setGame(int playerS) throws InterruptedException {
         generateRandom(2);
         p1Arta = new Arta(0, width, height, 150, 500);// TODO randomize position (or static?)
 		p2Arta = new Arta(1, width, height, 650, 500);
@@ -551,21 +687,11 @@ public class Sand extends Application {
         	}
         };
         timer.start();
-        mainStage.setOnCloseRequest(new EventHandler<WindowEvent>() {
-            public void handle(WindowEvent we) {
-                System.out.println("Stage is closing");
-                if(serverThread!=null) serverThread.stop();
-                if(clientThread!=null) clientThread.stop();
-                timer.stop();
-                Platform.exit();
-                
-            }
-        });
         
         button.setOnAction((event) -> {
         	try {
-        		if(serverThread != null) serverThread.quit();
-        		if(clientThread != null) clientThread.quit();
+        		if(serverThread != null) serverThread.quit(true);
+        		if(clientThread != null) clientThread.quit(true);
         		mainMenu();
         		state = MapState.ENTRY;
         		stable = false;
@@ -577,13 +703,10 @@ public class Sand extends Application {
         	System.out.println("went back to menu");
         	return;
         });
-        //state = MapState.CANSHOOT; // NOT MANUAL
-        
     }
 	
 	
 	class updateMap implements Runnable {
-		private Thread t;
 		@Override
         public void run() {
             if(!stable) {
@@ -629,6 +752,7 @@ public class Sand extends Application {
 
             	if(bpos == -1) {
             		System.out.println("Flew out of bounds.");
+            		switchTurns();
             		who.returnBullet();
             		state = MapState.CANSHOOT;
             		stable = true;
@@ -643,13 +767,6 @@ public class Sand extends Application {
             }
         }
 		
-		public void start () {
-		     // System.out.println("Starting map thread");
-		      if (t == null) {
-		         t = new Thread (this, "mapth");
-		         t.start ();
-		      }
-		}
 	}
 	
 	private void recieveHit(int x, int y) {
@@ -696,8 +813,51 @@ public class Sand extends Application {
 				}
 			}
 		}
+		
+		
+		checkWinners();
 		stable = false;
 		switchTurns();
+	}
+	
+	private void checkWinners() {
+		if(player.hp<=0) {
+			if(serverThread!=null) {
+				dbHandler.updateGameWon(currentGID, loggedPID, enemyPID, mapSeed, 1);
+				mmCtrl.loserScreen(loggedPID, enemyPID);
+				serverThread.quit(false);
+			}
+			if(clientThread!=null) {
+				mmCtrl.loserScreen(loggedPID, enemyPID);
+				clientThread.quit(false);
+			}
+			
+			
+			mainMenu();			// TODO make a reset method
+    		state = MapState.ENTRY;
+    		stable = false;
+    		map = new boolean[height*width];
+    		timer.stop();
+		}
+		
+		if(enemy.hp<=0) {
+			if(serverThread!=null) {
+				dbHandler.updateGameWon(currentGID, loggedPID, enemyPID, mapSeed, 0);
+				mmCtrl.winnerScreen(loggedPID, enemyPID);
+				serverThread.quit(false);
+			}
+			if(clientThread!=null) {
+				mmCtrl.winnerScreen(loggedPID, enemyPID);
+				clientThread.quit(false);
+			}
+			
+			
+			mainMenu();
+    		state = MapState.ENTRY;
+    		stable = false;
+    		map = new boolean[height*width];
+    		timer.stop();
+		}
 	}
 	
 	private boolean isLegal(int x, int y) {

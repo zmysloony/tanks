@@ -28,7 +28,7 @@ public class Arta {
 		mapWidth = w;
 		owner = o;
 		ready = (owner==1) ? false : true;
-		hp = 100;
+		hp = 10;
 		shotVelocity = 10;
 		bullet = new Bullet(mapWidth, mapHeight);
 		

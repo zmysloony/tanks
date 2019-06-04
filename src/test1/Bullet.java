@@ -2,7 +2,6 @@ package test1;
 
 import javafx.scene.layout.HBox;
 import javafx.scene.shape.Ellipse;
-import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
 
 public class Bullet {
