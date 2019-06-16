@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Rectangle2D?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.text.Font?>
+<?import javafx.scene.text.Text?>
+<?import javafx.scene.control.PasswordField?>
+
+<Pane maxHeight="640.0" maxWidth="800.0" minHeight="-Infinity" minWidth="-Infinity" prefHeight="640.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="main.RegisterScreenController">
+   <children>
+      <ImageView fitHeight="665.0" fitWidth="1309.0" layoutX="-273.0" layoutY="-6.0" pickOnBounds="true" preserveRatio="true">
+         <viewport>
+            <Rectangle2D minX="800.0" />
+         </viewport>
+         <image>
+            <Image url="@../../res/mainmenubg.jpg" />
+         </image>
+      </ImageView>
+      <TextField fx:id="login" layoutX="369.0" layoutY="224.0" />
+      <Text layoutX="320.0" layoutY="242.0" stroke="WHITE" strokeType="OUTSIDE" text="Login:">
+         <font>
+            <Font size="16.0" />
+         </font>
+      </Text>
+      <PasswordField fx:id="password" layoutX="369.0" layoutY="262.0" />
+      <Text layoutX="292.0" layoutY="280.0" stroke="#f8f5f5" strokeType="OUTSIDE" text="Password:">
+         <font>
+            <Font size="16.0" />
+         </font>
+      </Text>
+      <Button fx:id="submit" layoutX="375.0" layoutY="346.0" mnemonicParsing="false" onAction="#submitRegister" text="Submit" />
+      <Text layoutX="651.0" layoutY="622.0" strokeType="OUTSIDE" strokeWidth="0.0" text="© 2019 Piotr Zmyślony" />
+      <Button fx:id="backToLogin" layoutX="368.0" layoutY="470.0" mnemonicParsing="false" onAction="#gotoLogin" text="Back to login">
+         <font>
+            <Font size="13.0" />
+         </font>
+      </Button>
+      <Text fx:id="passNoMatch" fill="#a40000" layoutX="535.0" layoutY="317.0" stroke="BLACK" strokeType="OUTSIDE" strokeWidth="0.0" text="passwords don't match!" wrappingWidth="246.0">
+         <font>
+            <Font size="16.0" />
+         </font>
+      </Text>
+      <Text layoutX="237.0" layoutY="318.0" stroke="#f8f5f5" strokeType="OUTSIDE" text="Repeat password:">
+         <font>
+            <Font size="16.0" />
+         </font>
+      </Text>
+      <PasswordField fx:id="passwordCheck" layoutX="369.0" layoutY="300.0" />
+      <Text fx:id="loginTaken" fill="#a40000" layoutX="535.0" layoutY="241.0" stroke="BLACK" strokeType="OUTSIDE" strokeWidth="0.0" text="login already taken!" wrappingWidth="246.0">
+         <font>
+            <Font size="16.0" />
+         </font>
+      </Text>
+      <Pane prefHeight="200.0" prefWidth="800.0">
+         <children>
+            <Text disable="true" layoutY="119.0" stroke="WHITE" strokeType="OUTSIDE" strokeWidth="2.0" text="105 leFH18B2" textAlignment="CENTER" wrappingWidth="800.0">
+               <font>
+                  <Font size="52.0" />
+               </font>
+            </Text>
+            <ImageView fitHeight="150.0" fitWidth="200.0" layoutX="592.0" layoutY="25.0" pickOnBounds="true" preserveRatio="true">
+               <image>
+                  <Image url="@../../res/duckred.png" />
+               </image>
+            </ImageView>
+            <ImageView fitHeight="150.0" fitWidth="200.0" layoutX="45.0" layoutY="25.0" pickOnBounds="true" preserveRatio="true">
+               <image>
+                  <Image url="@../../res/duck.png" />
+               </image>
+            </ImageView>
+         </children>
+      </Pane>
+   </children>
+</Pane>

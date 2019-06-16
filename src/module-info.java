@@ -9,6 +9,7 @@ module test1 {
 	requires java.desktop;
 	requires java.sql;
 	requires org.apache.logging.log4j;
-	exports test1;
-	opens test1 to javafx.graphics, javafx.fxml;
+	requires junit;
+	exports main;
+	opens main to javafx.graphics, javafx.fxml;
 }
